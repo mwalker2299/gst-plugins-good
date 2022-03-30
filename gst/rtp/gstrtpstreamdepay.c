@@ -128,6 +128,49 @@ gst_rtp_stream_depay_set_sink_caps (GstBaseParse * parse, GstCaps * caps)
   return ret;
 }
 
+static void
+gst_stream_depayload_dump_mem (GstBaseParse *self, const guchar * mem, guint size)
+{
+  guint i, j;
+  GString *string = g_string_sized_new (50);
+  GString *chars = g_string_sized_new (18);
+
+  i = j = 0;
+  while (i < size) {
+    if (g_ascii_isprint (mem[i]))
+      g_string_append_c (chars, mem[i]);
+    else
+      g_string_append_c (chars, '.');
+
+    g_string_append_printf (string, "%02x ", mem[i]);
+
+    j++;
+    i++;
+
+    if (j == 16 || i == size) {
+      GST_DEBUG_OBJECT (self, "%08x (%p): %-48.48s %-16.16s\n", i - j, mem + i - j,
+          string->str, chars->str);
+      g_string_set_size (string, 0);
+      g_string_set_size (chars, 0);
+      j = 0;
+    } 
+  }
+  g_string_free (string, TRUE);
+  g_string_free (chars, TRUE);
+}
+
+static void
+gst_stream_depayload_dump_buffer (GstBaseParse *self, GstBuffer * buf)
+{
+  GstMapInfo map;
+  GST_DEBUG_OBJECT(self, "Deumping buffer mem");
+
+  if (gst_buffer_map (buf, &map, GST_MAP_READ)) {
+    gst_stream_depayload_dump_mem (self, map.data, map.size);
+    gst_buffer_unmap (buf, &map);
+  }
+}
+
 static GstCaps *
 gst_rtp_stream_depay_get_sink_caps (GstBaseParse * parse, GstCaps * filter)
 {
@@ -213,6 +256,8 @@ gst_rtp_stream_depay_handle_frame (GstBaseParse * parse,
 
   frame->out_buffer =
       gst_buffer_copy_region (frame->buffer, GST_BUFFER_COPY_ALL, 2, size);
+
+  // gst_stream_depayload_dump_buffer(parse, frame->out_buffer);
 
   return gst_base_parse_finish_frame (parse, frame, size + 2);
 }

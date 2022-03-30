@@ -247,6 +247,51 @@ gst_rtp_stream_pay_sink_event (GstPad * pad, GstObject * parent,
   return ret;
 }
 
+static void
+gst_stream_payload_dump_mem (GstRtpStreamPay *self, const guchar * mem, guint size)
+{
+  guint i, j;
+  GString *string = g_string_sized_new (50);
+  GString *chars = g_string_sized_new (18);
+
+  i = j = 0;
+  while (i < size) {
+    if (g_ascii_isprint (mem[i]))
+      g_string_append_c (chars, mem[i]);
+    else
+      g_string_append_c (chars, '.');
+
+    g_string_append_printf (string, "%02x ", mem[i]);
+
+    j++;
+    i++;
+
+    if (j == 16 || i == size) {
+      GST_DEBUG_OBJECT (self, "%08x (%p): %-48.48s %-16.16s\n", i - j, mem + i - j,
+          string->str, chars->str);
+      g_string_set_size (string, 0);
+      g_string_set_size (chars, 0);
+      j = 0;
+      break;
+    } 
+  }
+  g_string_free (string, TRUE);
+  g_string_free (chars, TRUE);
+}
+
+static void
+gst_stream_payload_dump_buffer (GstRtpStreamPay *self, GstBuffer * buf)
+{
+  GstMapInfo map;
+  GST_DEBUG_OBJECT(self, "Deumping buffer mem");
+
+  if (gst_buffer_map (buf, &map, GST_MAP_READ)) {
+    gst_stream_payload_dump_mem (self, map.data, map.size);
+    gst_buffer_unmap (buf, &map);
+  }
+}
+
+
 static GstFlowReturn
 gst_rtp_stream_pay_sink_chain (GstPad * pad, GstObject * parent,
     GstBuffer * inbuf)
@@ -257,6 +302,7 @@ gst_rtp_stream_pay_sink_chain (GstPad * pad, GstObject * parent,
   guint8 size16[2];
 
   size = gst_buffer_get_size (inbuf);
+  GST_DEBUG_OBJECT(self, "Got buffer of size %lu", size);
   if (size > G_MAXUINT16) {
     GST_ELEMENT_ERROR (self, CORE, FAILED, (NULL),
         ("Only buffers up to %d bytes supported, got %" G_GSIZE_FORMAT,
@@ -273,6 +319,8 @@ gst_rtp_stream_pay_sink_chain (GstPad * pad, GstObject * parent,
   gst_buffer_copy_into (outbuf, inbuf, GST_BUFFER_COPY_ALL, 0, -1);
 
   gst_buffer_unref (inbuf);
+
+  // gst_stream_payload_dump_buffer(self, outbuf);
 
   return gst_pad_push (self->srcpad, outbuf);
 }
